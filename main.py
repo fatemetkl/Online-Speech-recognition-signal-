@@ -4,10 +4,14 @@ import librosa
 import numpy as np
 # import matplotlib.pyplot as plt
 import tensorflow as tf
+import scipy.io.wavfile as wf
 # from matplotlib.pyplot import specgram
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 def extract_feature(file_name):
     X, sample_rate = librosa.load(file_name)
+    print("sample_rate")
     stft = np.abs(librosa.stft(X))
     mfccs = np.mean(librosa.feature.mfcc(y=X, sr=sample_rate, n_mfcc=40).T,axis=0)
     chroma = np.mean(librosa.feature.chroma_stft(S=stft, sr=sample_rate).T,axis=0)
@@ -21,14 +25,21 @@ def parse_audio_files(parent_dir,sub_dirs,file_ext="*.wav"):
     features, labels = np.empty((0,193)), np.empty(0)
     for label, sub_dir in enumerate(sub_dirs):
         for fn in glob.glob(os.path.join(parent_dir, sub_dir, file_ext)):
-            try:
-              mfccs, chroma, mel, contrast,tonnetz = extract_feature(fn)
-            except Exception as e:
-              print ("Error encountered while parsing file: ", fn)
-              continue
+            # try:
+            print("in")
+            mfccs, chroma, mel, contrast,tonnetz = extract_feature(fn)
+            # except Exception as e:
+            #   print ("Error encountered while parsing file: ", fn)
+            #   continue
             ext_features = np.hstack([mfccs,chroma,mel,contrast,tonnetz])
             features = np.vstack([features,ext_features])
-            labels = np.append(labels, fn.split('/')[2].split('-')[1])
+            # labels = np.append(labels, fn.split('/')[2].split('-')[1])
+            str=(fn.split('/')[2])[0]
+            if str=='n':
+                labels=np.append(labels,0)
+            else:
+                labels=np.append(labels,1)
+
     return np.array(features), np.array(labels, dtype = np.int)
 
 def one_hot_encode(labels):
@@ -40,9 +51,11 @@ def one_hot_encode(labels):
 
 
 
-parent_dir = 'Sound-Data'
-tr_sub_dirs = ["fold1","fold2"]
-ts_sub_dirs = ["fold3"]
+parent_dir = 'db'
+# tr_sub_dirs = ["fold1","fold2"]
+# ts_sub_dirs = ["fold3"]
+tr_sub_dirs=["train"]
+ts_sub_dirs=["test"]
 tr_features, tr_labels = parse_audio_files(parent_dir,tr_sub_dirs)
 ts_features, ts_labels = parse_audio_files(parent_dir,ts_sub_dirs)
 
@@ -53,7 +66,7 @@ ts_labels = one_hot_encode(ts_labels)
 
 training_epochs = 50
 n_dim = tr_features.shape[1]
-n_classes = 10
+n_classes = 2
 n_hidden_units_one = 280 
 n_hidden_units_two = 300
 sd = 1 / np.sqrt(n_dim)
@@ -77,7 +90,7 @@ W = tf.Variable(tf.random_normal([n_hidden_units_two,n_classes], mean = 0, stdde
 b = tf.Variable(tf.random_normal([n_classes], mean = 0, stddev=sd))
 y_ = tf.nn.softmax(tf.matmul(h_2,W) + b)
 
-init = tf.initialize_all_variables()
+init = tf.global_variables_initializer()
 
 cost_function = -tf.reduce_sum(Y * tf.log(y_))
 optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(cost_function)
